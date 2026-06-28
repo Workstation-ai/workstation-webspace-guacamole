@@ -1,0 +1,4 @@
+#!/bin/bash
+# Workstation Center OS - Tiny Edition shortcut
+# Usage: ./run-tiny [--agent-preset-workspace]
+exec "$(dirname "$0")/run" --edition tiny "$@"

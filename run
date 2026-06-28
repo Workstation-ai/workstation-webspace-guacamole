@@ -1,15 +1,25 @@
 #!/bin/bash
-# workstation-webspace-guacamole: One-command setup
-# Usage: ./run [--agent-preset-workspace]
+# Workstation Center OS - One-command setup
+# Usage: ./run [--edition tiny|pro] [--agent-preset-workspace]
 set -euo pipefail
 
 # --- Parse flags ---
+EDITION="tiny"
 AGENT_WORKSPACE=false
 for arg in "$@"; do
   case "$arg" in
+    --edition) shift; EDITION="${1:-tiny}"; shift ;;
+    --edition=tiny) EDITION="tiny" ;;
+    --edition=pro) EDITION="pro" ;;
     --agent-preset-workspace) AGENT_WORKSPACE=true ;;
   esac
 done
+
+# Validate edition
+if [[ ! "$EDITION" =~ ^(tiny|pro)$ ]]; then
+  echo "Error: Invalid edition '$EDITION'. Use 'tiny' or 'pro'."
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 USER_HOME="$HOME"
@@ -52,29 +62,56 @@ if ! pidof systemd > /dev/null 2>&1; then
   USE_SYSTEMD=false
 fi
 
-echo "=== workstation-webspace-guacamole ==="
+echo "=== Workstation Center OS ==="
+echo "Edition: ${EDITION^}"
 echo "Resolution: ${RESOLUTION}x${DEPTH}bit"
 echo "User: ${USER_NAME}"
 echo "Guacamole: v${GUAC_VERSION}"
 echo ""
 
+# --- Cleanup previous run ---
+echo "Cleaning up previous services..."
+if [ "$USE_SYSTEMD" = true ]; then
+  sudo systemctl stop guacd 2>/dev/null || true
+  sudo systemctl stop tomcat9 2>/dev/null || true
+fi
+pkill -9 -f "Xvfb :99" 2>/dev/null || true
+pkill -9 -f "fluxbox" 2>/dev/null || true
+pkill -9 -f "startxfce4" 2>/dev/null || true
+pkill -9 -f "xfce4-session" 2>/dev/null || true
+pkill -9 -f "x11vnc" 2>/dev/null || true
+pkill -9 -f "websockify" 2>/dev/null || true
+# Kill any cloudflared tunnels pointing to our ports (6080 or 8080)
+for pid in $(pgrep -f "cloudflared.*--url.*:8080"); do kill -9 $pid 2>/dev/null; done
+for pid in $(pgrep -f "cloudflared.*--url.*:6080"); do kill -9 $pid 2>/dev/null; done
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
+sleep 2
+
 # --- Packages ---
-echo "[1/8] Installing dependencies..."
+echo "[1/9] Installing dependencies..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq \
-  build-essential libcairo2-dev libjpeg62-dev libpng-dev libtool-bin libossp-uuid-dev \
+DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq \
+  build-essential libcairo2-dev libjpeg-turbo8-dev libpng-dev libtool-bin libossp-uuid-dev \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
   freerdp2-dev libpango1.0-dev libssh2-1-dev libtelnet-dev \
   libvncserver-dev libwebsockets-dev libpulse-dev libssl-dev \
   libvorbis-dev libwebp-dev \
   curl wget git unzip \
-  x11vnc fluxbox xfce4-terminal xdg-utils xsel dbus-x11 xdotool wmctrl \
+  x11vnc xdg-utils xsel dbus-x11 xdotool wmctrl fonts-dejavu fonts-noto-cjk \
   2>&1 | tail -5
+
+# Install edition-specific packages
+echo "[2/9] Installing desktop environment (${EDITION})..."
+if [ "$EDITION" = "pro" ]; then
+  bash "${SCRIPT_DIR}/scripts/pro/install-xfce4.sh"
+else
+  bash "${SCRIPT_DIR}/scripts/tiny/install-fluxbox.sh"
+fi
 
 # Install Java if not present
 if ! command -v java &> /dev/null; then
   echo "Installing Java..."
-  sudo apt-get install -y -qq default-jdk 2>&1 | tail -3
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq default-jdk 2>&1 | tail -3
 fi
 
 # Install Tomcat 9
@@ -85,7 +122,7 @@ if [ ! -d "/var/lib/tomcat${TOMCAT_VERSION}" ]; then
     sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu jammy universe" 2>/dev/null || true
     sudo apt-get update -qq
   fi
-  sudo apt-get install -y -qq tomcat9 tomcat9-admin 2>&1 | tail -3
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq tomcat9 tomcat9-admin 2>&1 | tail -3
 else
   echo "Tomcat ${TOMCAT_VERSION} already installed"
 fi
@@ -99,7 +136,7 @@ if ! command -v cloudflared &> /dev/null; then
 fi
 
 # --- Build guacamole-server ---
-echo "[2/8] Building guacamole-server v${GUAC_VERSION}..."
+echo "[3/9] Building guacamole-server v${GUAC_VERSION}..."
 if ! command -v guacd &> /dev/null; then
   cd /tmp
   if [ ! -d "guacamole-server-${GUAC_VERSION}" ]; then
@@ -117,7 +154,7 @@ else
 fi
 
 # --- Deploy guacamole-client ---
-echo "[3/8] Deploying guacamole-client..."
+echo "[4/9] Deploying guacamole-client..."
 GUAC_HOME="/etc/guacamole"
 sudo mkdir -p "${GUAC_HOME}"/{extensions,lib}
 
@@ -137,7 +174,7 @@ if ! grep -q "GUACAMOLE_HOME" /etc/default/tomcat9 2>/dev/null; then
 fi
 
 # --- Configure guacamole.properties ---
-echo "[4/8] Configuring Guacamole..."
+echo "[5/9] Configuring Guacamole..."
 sudo tee "${GUAC_HOME}/guacamole.properties" > /dev/null << EOF
 guacd-hostname: localhost
 guacd-port:     4822
@@ -145,7 +182,7 @@ auth-provider:  guacauth
 EOF
 
 # --- Configure SQLite auth ---
-echo "[5/8] Setting up authentication..."
+echo "[6/9] Setting up authentication..."
 if [ ! -f "${GUAC_HOME}/guacamole.db" ]; then
   # Download auth extension if needed
   if [ ! -f "${GUAC_HOME}/extensions/guacamole-auth-sqlite-${GUAC_VERSION}.jar" ]; then
@@ -171,53 +208,14 @@ EOF
 fi
 
 # --- VNC Password ---
-echo "[6/8] Setting VNC password..."
+echo "[7/9] Setting VNC password..."
 mkdir -p "$USER_HOME/.vnc"
 x11vnc -storepasswd "$VNC_PASSWORD" "$USER_HOME/.vnc/passwd" 2>&1 | tail -1
-
-# --- Fluxbox ---
-echo "[7/8] Configuring desktop..."
-mkdir -p "$USER_HOME/.fluxbox"
-
-cat > "$USER_HOME/.fluxbox/menu" << 'MENU'
-[begin] (Desktop)
-	[submenu] (Applications)
-		[exec] (Terminal) {xfce4-terminal} <>
-		[exec] (Firefox) {/opt/firefox/firefox} <>
-		[exec] (Text Editor) {xfce4-terminal -e nano} <>
-	[end]
-	[submenu] (System)
-		[exec] (htop) {xfce4-terminal -e htop} <>
-	[end]
-	[separator]
-	[restart] (Restart) <>
-	[exit] (Exit) <>
-end
-MENU
-
-cat > "$USER_HOME/.fluxbox/init" << EOF
-! Toolbar
-session.screen0.toolbar.visible: true
-session.screen0.toolbar.widthPercent: 100
-session.screen0.toolbar.height: 32
-session.screen0.toolbar.tools: prevworkspace, workspacename, nextworkspace, clock, iconbar, systemtray
-
-! Iconbar
-session.screen0.iconbar.mode: {static groups} (workspace=[current])
-
-! Workspace
-session.screen0.workspaceCount: 1
-EOF
-
-# Download default wallpaper
-wget -q "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&h=1080&fit=crop" -O "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
-
-# Set wallpaper after X starts (fbsetbg runs in start section below)
 
 # --- Systemd services or direct mode ---
 TUNNEL_LOG=""
 if [ "$USE_SYSTEMD" = true ]; then
-  echo "[8/8] Installing services..."
+  echo "[8/9] Installing services..."
   sudo mkdir -p /var/log/bux
   TUNNEL_LOG="/var/log/bux/guacamole-tunnel.log"
   
@@ -228,7 +226,7 @@ Description=Guacamole Proxy Daemon
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 ExecStart=/usr/local/sbin/guacd -f
 Restart=on-failure
 RestartSec=5
@@ -240,7 +238,7 @@ EOF
   sudo systemctl daemon-reload
   sudo systemctl enable guacd 2>/dev/null
 else
-  echo "[8/8] Direct mode (no systemd)..."
+  echo "[8/9] Direct mode (no systemd)..."
   LOG_DIR="$USER_HOME/.workstation-webspace-guacamole/logs"
   mkdir -p "$LOG_DIR"
   TUNNEL_LOG="$LOG_DIR/tunnel.log"
@@ -248,31 +246,7 @@ fi
 
 # --- Apply branding ---
 echo "[9/9] Applying Workstation Center branding..."
-TOMCAT_WEBAPPS="/var/lib/tomcat${TOMCAT_VERSION}/webapps"
-GUAC_WEBAPP="${TOMCAT_WEBAPPS}/guacamole"
-
-# Download and replace logo
-wget -q "https://workstation.center/logo.png" -O /tmp/workstation-logo.png 2>/dev/null || true
-if [ -f /tmp/workstation-logo.png ]; then
-  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/guac-tricolor.svg" 2>/dev/null || true
-  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/logo-64.png" 2>/dev/null || true
-  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/logo-144.png" 2>/dev/null || true
-fi
-
-# Create W favicon
-if command -v convert &> /dev/null; then
-  convert -size 32x32 xc:white -font DejaVu-Sans-Bold -pointsize 24 -fill black -gravity center -annotate 0 "W" /tmp/favicon-32.png 2>/dev/null || true
-  convert -size 16x16 xc:white -font DejaVu-Sans-Bold -pointsize 12 -fill black -gravity center -annotate 0 "W" /tmp/favicon-16.png 2>/dev/null || true
-  sudo cp /tmp/favicon-32.png "${GUAC_WEBAPP}/images/favicon-32.png" 2>/dev/null || true
-  sudo cp /tmp/favicon-16.png "${GUAC_WEBAPP}/images/favicon-16.png" 2>/dev/null || true
-fi
-
-# Update title and app name
-sudo sed -i 's|"NAME"    : "Apache Guacamole"|"NAME"    : "Workstation Center OS"|g' "${GUAC_WEBAPP}/translations/en.json" 2>/dev/null || true
-sudo sed -i 's|"NAME"    : "Apache Guacamole"|"NAME"    : "Workstation Center OS"|g' "${GUAC_WEBAPP}/translations/es.json" 2>/dev/null || true
-sudo sed -i 's#<title ng-bind="page.title | translate"></title>#<title>Workstation Center OS</title>#g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
-sudo sed -i 's|<link rel="icon" type="image/png" href="images/logo-64.png">|<link rel="icon" type="image/png" href="images/favicon-32.png">|g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
-sudo sed -i 's|<link rel="icon" type="image/png" sizes="144x144" href="images/logo-144.png">|<link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png"><link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">|g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
+bash "${SCRIPT_DIR}/scripts/branding/apply-branding.sh"
 
 # Create /workstation route
 sudo ln -sf "${TOMCAT_WEBAPPS}/guacamole" "${TOMCAT_WEBAPPS}/workstation" 2>/dev/null || true
@@ -291,17 +265,25 @@ fi
 echo ""
 echo "Starting services..."
 
+# Determine desktop command based on edition
+if [ "$EDITION" = "pro" ]; then
+  DESKTOP_CMD="startxfce4"
+else
+  DESKTOP_CMD="fluxbox"
+fi
+
 if [ "$USE_SYSTEMD" = true ]; then
   sudo systemctl start guacd 2>/dev/null || true
   sudo systemctl restart tomcat9 2>/dev/null || true
   
+  # Ensure clean X state
+  rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
+  
   # Start desktop
   Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
   sleep 1
-  DISPLAY=:99 fluxbox &
-  sleep 2
-  DISPLAY=:99 fbsetbg -f "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
-  sleep 1
+  DISPLAY=:99 $DESKTOP_CMD &
+  sleep 3
   DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
 else
   # Direct mode
@@ -309,8 +291,10 @@ else
 
   # Kill existing
   pkill -f "Xvfb :99" 2>/dev/null || true
-  pkill -f "fluxbox -display :99" 2>/dev/null || true
-  pkill -f "x11vnc -display :99" 2>/dev/null || true
+  pkill -f "fluxbox" 2>/dev/null || true
+  pkill -f "startxfce4" 2>/dev/null || true
+  pkill -f "xfce4-session" 2>/dev/null || true
+  pkill -f "x11vnc" 2>/dev/null || true
   pkill -f guacd 2>/dev/null || true
   sleep 1
 
@@ -327,10 +311,8 @@ else
   # Start desktop
   Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
   sleep 1
-  DISPLAY=:99 fluxbox &
-  sleep 2
-  DISPLAY=:99 fbsetbg -f "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
-  sleep 1
+  DISPLAY=:99 $DESKTOP_CMD &
+  sleep 3
   DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
 fi
 
@@ -365,12 +347,13 @@ fi
 echo ""
 echo "=== Ready ==="
 echo ""
+echo "Edition: ${EDITION^}"
 if [ -n "$CF_URL" ]; then
-  echo "Public URL:  ${CF_URL}/guacamole"
+  echo "Public URL:  ${CF_URL}/workstation"
   echo ""
   echo "Or use direct access:"
 fi
-echo "Local URL:   http://localhost:8080/guacamole"
+echo "Local URL:   http://localhost:8080/workstation"
 echo "VNC direct:  vnc://localhost:5900"
 echo ""
 echo "Login:"
@@ -382,7 +365,6 @@ if [ "$AGENT_WORKSPACE" = true ]; then
 fi
 echo ""
 echo "--- How to access ---"
-echo "1. In Codespaces: click the 'Ports' tab, find port 8080, click the globe icon"
-echo "2. Or open: http://localhost:8080/guacamole in your browser"
-echo "3. Login with guacadmin / your GUAC_PASSWORD"
-echo "4. Add connections: Settings → Connections → New Connection"
+echo "1. Open: http://localhost:8080/workstation in your browser"
+echo "2. Login with guacadmin / your GUAC_PASSWORD"
+echo "3. Enjoy Workstation Center OS ${EDITION^} Edition!"

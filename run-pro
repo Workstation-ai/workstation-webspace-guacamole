@@ -1,0 +1,4 @@
+#!/bin/bash
+# Workstation Center OS - Pro Edition shortcut
+# Usage: ./run-pro [--agent-preset-workspace]
+exec "$(dirname "$0")/run" --edition pro "$@"
