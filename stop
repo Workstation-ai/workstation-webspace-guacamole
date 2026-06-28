@@ -12,6 +12,8 @@ else
   pkill -f "fluxbox -display :99" 2>/dev/null || true
   pkill -f "x11vnc -display :99" 2>/dev/null || true
   pkill -f guacd 2>/dev/null || true
-  sudo /usr/share/tomcat9/bin/shutdown.sh 2>/dev/null || true
+  export CATALINA_HOME="/usr/share/tomcat9"
+  export CATALINA_BASE="/var/lib/tomcat9"
+  sudo -E /usr/share/tomcat9/bin/catalina.sh stop 2>/dev/null || true
 fi
 echo "Stopped."

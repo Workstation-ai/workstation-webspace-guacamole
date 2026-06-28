@@ -280,8 +280,10 @@ else
   /usr/local/sbin/guacd -f &
   sleep 2
 
-  # Start Tomcat
-  sudo /usr/share/tomcat${TOMCAT_VERSION}/bin/startup.sh 2>/dev/null || true
+  # Start Tomcat with correct CATALINA_BASE
+  export CATALINA_HOME="/usr/share/tomcat${TOMCAT_VERSION}"
+  export CATALINA_BASE="/var/lib/tomcat${TOMCAT_VERSION}"
+  sudo -E /usr/share/tomcat${TOMCAT_VERSION}/bin/catalina.sh start 2>/dev/null || true
   sleep 3
 
   # Start desktop
