@@ -279,12 +279,26 @@ if [ "$USE_SYSTEMD" = true ]; then
   # Ensure clean X state
   rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
   
-  # Start desktop
-  Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
+  # Start desktop (nohup required so services survive script exit)
+  nohup Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac > /tmp/xvfb.log 2>&1 &
+  disown
   sleep 1
-  DISPLAY=:99 $DESKTOP_CMD &
+  nohup env DISPLAY=:99 $DESKTOP_CMD > /tmp/desktop.log 2>&1 &
+  disown
   sleep 3
-  DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
+  # Set wallpaper after desktop is ready
+  WALLPAPER="$USER_HOME/.workstation-center/wallpaper.jpg"
+  if [ -f "$WALLPAPER" ]; then
+    if [ "$EDITION" = "pro" ]; then
+      nohup env DISPLAY=:99 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$WALLPAPER" 2>/dev/null &
+    else
+      nohup env DISPLAY=:99 fbsetbg -f "$WALLPAPER" 2>/dev/null &
+    fi
+    disown
+  fi
+  sleep 1
+  nohup env DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes > /tmp/x11vnc.log 2>&1 &
+  disown
 else
   # Direct mode
   truncate -s 0 "$TUNNEL_LOG" 2>/dev/null || true

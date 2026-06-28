@@ -56,8 +56,8 @@ EOF
 echo "[3/3] Setting wallpaper..."
 WALLPAPER="${USER_HOME}/.workstation-center/wallpaper.jpg"
 if [ -f "$WALLPAPER" ]; then
-  # Delay wallpaper setting until X is ready
-  (sleep 3 && DISPLAY=:99 fbsetbg -f "$WALLPAPER" 2>/dev/null) &
+  # Wallpaper is set by the run script after X starts (this subprocess won't survive)
+  echo "Wallpaper will be applied on next start: $WALLPAPER"
 fi
 
 echo "=== Tiny Edition installed successfully ==="
