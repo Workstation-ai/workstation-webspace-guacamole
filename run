@@ -207,13 +207,12 @@ session.screen0.iconbar.mode: {static groups} (workspace=[current])
 
 ! Workspace
 session.screen0.workspaceCount: 1
-
-! Wallpaper
-session.screen0.rootCommands: {xsetroot -solid "#000000"} || wallpaper ~/.fluxbox/wallpaper.jpg || true
 EOF
 
 # Download default wallpaper
 wget -q "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&h=1080&fit=crop" -O "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
+
+# Set wallpaper after X starts (fbsetbg runs in start section below)
 
 # --- Systemd services or direct mode ---
 TUNNEL_LOG=""
@@ -247,6 +246,37 @@ else
   TUNNEL_LOG="$LOG_DIR/tunnel.log"
 fi
 
+# --- Apply branding ---
+echo "[9/9] Applying Workstation Center branding..."
+TOMCAT_WEBAPPS="/var/lib/tomcat${TOMCAT_VERSION}/webapps"
+GUAC_WEBAPP="${TOMCAT_WEBAPPS}/guacamole"
+
+# Download and replace logo
+wget -q "https://workstation.center/logo.png" -O /tmp/workstation-logo.png 2>/dev/null || true
+if [ -f /tmp/workstation-logo.png ]; then
+  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/guac-tricolor.svg" 2>/dev/null || true
+  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/logo-64.png" 2>/dev/null || true
+  sudo cp /tmp/workstation-logo.png "${GUAC_WEBAPP}/images/logo-144.png" 2>/dev/null || true
+fi
+
+# Create W favicon
+if command -v convert &> /dev/null; then
+  convert -size 32x32 xc:white -font DejaVu-Sans-Bold -pointsize 24 -fill black -gravity center -annotate 0 "W" /tmp/favicon-32.png 2>/dev/null || true
+  convert -size 16x16 xc:white -font DejaVu-Sans-Bold -pointsize 12 -fill black -gravity center -annotate 0 "W" /tmp/favicon-16.png 2>/dev/null || true
+  sudo cp /tmp/favicon-32.png "${GUAC_WEBAPP}/images/favicon-32.png" 2>/dev/null || true
+  sudo cp /tmp/favicon-16.png "${GUAC_WEBAPP}/images/favicon-16.png" 2>/dev/null || true
+fi
+
+# Update title and app name
+sudo sed -i 's|"NAME"    : "Apache Guacamole"|"NAME"    : "Workstation Center OS"|g' "${GUAC_WEBAPP}/translations/en.json" 2>/dev/null || true
+sudo sed -i 's|"NAME"    : "Apache Guacamole"|"NAME"    : "Workstation Center OS"|g' "${GUAC_WEBAPP}/translations/es.json" 2>/dev/null || true
+sudo sed -i 's#<title ng-bind="page.title | translate"></title>#<title>Workstation Center OS</title>#g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
+sudo sed -i 's|<link rel="icon" type="image/png" href="images/logo-64.png">|<link rel="icon" type="image/png" href="images/favicon-32.png">|g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
+sudo sed -i 's|<link rel="icon" type="image/png" sizes="144x144" href="images/logo-144.png">|<link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16.png"><link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">|g' "${GUAC_WEBAPP}/index.html" 2>/dev/null || true
+
+# Create /workstation route
+sudo ln -sf "${TOMCAT_WEBAPPS}/guacamole" "${TOMCAT_WEBAPPS}/workstation" 2>/dev/null || true
+
 # --- pbcopy/pbpaste ---
 if ! grep -q "pbcopy" "$USER_HOME/.bashrc" 2>/dev/null; then
   cat >> "$USER_HOME/.bashrc" << 'EOF'
@@ -269,6 +299,8 @@ if [ "$USE_SYSTEMD" = true ]; then
   Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
   sleep 1
   DISPLAY=:99 fluxbox &
+  sleep 2
+  DISPLAY=:99 fbsetbg -f "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
   sleep 1
   DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
 else
@@ -296,6 +328,8 @@ else
   Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
   sleep 1
   DISPLAY=:99 fluxbox &
+  sleep 2
+  DISPLAY=:99 fbsetbg -f "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
   sleep 1
   DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
 fi
