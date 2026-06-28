@@ -168,6 +168,10 @@ fi
 TOMCAT_WEBAPPS="/var/lib/tomcat${TOMCAT_VERSION}/webapps"
 sudo ln -sf "${GUAC_HOME}/guacamole.war" "${TOMCAT_WEBAPPS}/guacamole.war"
 
+# Fix permissions so tomcat user can read the webapp
+sudo chown -R tomcat:tomcat "${TOMCAT_WEBAPPS}/guacamole"* 2>/dev/null || true
+sudo chmod -R 755 "${TOMCAT_WEBAPPS}/guacamole" 2>/dev/null || true
+
 # Set GUACAMOLE_HOME
 if ! grep -q "GUACAMOLE_HOME" /etc/default/tomcat9 2>/dev/null; then
   echo "GUACAMOLE_HOME=${GUAC_HOME}" | sudo tee -a /etc/default/tomcat9
@@ -247,6 +251,10 @@ fi
 # --- Apply branding ---
 echo "[9/9] Applying Workstation Center branding..."
 bash "${SCRIPT_DIR}/scripts/branding/apply-branding.sh"
+
+# Fix permissions after branding (files may be owned by root)
+sudo chown -R tomcat:tomcat "${TOMCAT_WEBAPPS}/guacamole" 2>/dev/null || true
+sudo chmod -R 755 "${TOMCAT_WEBAPPS}/guacamole" 2>/dev/null || true
 
 # Create /workstation route
 sudo ln -sf "${TOMCAT_WEBAPPS}/guacamole" "${TOMCAT_WEBAPPS}/workstation" 2>/dev/null || true
