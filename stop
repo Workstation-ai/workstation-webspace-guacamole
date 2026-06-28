@@ -1,0 +1,17 @@
+#!/bin/bash
+# workstation-webspace-guacamole: Stop all services
+set -euo pipefail
+
+if pidof systemd > /dev/null 2>&1; then
+  echo "Stopping..."
+  sudo systemctl stop guacd 2>/dev/null || true
+  sudo systemctl stop tomcat9 2>/dev/null || true
+else
+  echo "Stopping (direct mode)..."
+  pkill -f "Xvfb :99" 2>/dev/null || true
+  pkill -f "fluxbox -display :99" 2>/dev/null || true
+  pkill -f "x11vnc -display :99" 2>/dev/null || true
+  pkill -f guacd 2>/dev/null || true
+  sudo /usr/share/tomcat9/bin/shutdown.sh 2>/dev/null || true
+fi
+echo "Stopped."

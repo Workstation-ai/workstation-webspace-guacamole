@@ -1,0 +1,27 @@
+#!/bin/bash
+# workstation-webspace-guacamole: Show status
+echo "=== workstation-webspace-guacamole ==="
+
+if pidof systemd > /dev/null 2>&1; then
+  echo "guacd:      $(systemctl is-active guacd 2>/dev/null || echo 'unknown')"
+  echo "tomcat9:    $(systemctl is-active tomcat9 2>/dev/null || echo 'unknown')"
+else
+  echo "guacd:      $(pgrep -f guacd > /dev/null && echo 'running' || echo 'stopped')"
+  echo "tomcat9:    $(pgrep -f tomcat > /dev/null && echo 'running' || echo 'stopped')"
+  echo "Xvfb:       $(pgrep -f 'Xvfb :99' > /dev/null && echo 'running' || echo 'stopped')"
+  echo "fluxbox:    $(pgrep -f 'fluxbox -display :99' > /dev/null && echo 'running' || echo 'stopped')"
+  echo "x11vnc:     $(pgrep -f 'x11vnc -display :99' > /dev/null && echo 'running' || echo 'stopped')"
+fi
+
+echo ""
+echo "Local URL:  http://localhost:8080/guacamole"
+echo "VNC direct: vnc://localhost:5900"
+
+# Show password from .env if available
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  source "$SCRIPT_DIR/.env"
+  echo "Login:      guacadmin / ${GUAC_PASSWORD:-not set}"
+else
+  echo "Login:      (no .env file)"
+fi

@@ -1,0 +1,44 @@
+#!/bin/bash
+# workstation-webspace-guacamole: Uninstall cleanly
+set -euo pipefail
+
+echo "=== Uninstalling ==="
+
+# Stop services
+if pidof systemd > /dev/null 2>&1; then
+  echo "[1/4] Stopping services..."
+  sudo systemctl stop guacd 2>/dev/null || true
+  sudo systemctl disable guacd 2>/dev/null || true
+  sudo systemctl stop tomcat9 2>/dev/null || true
+
+  echo "[2/4] Removing services..."
+  sudo rm -f /etc/systemd/system/guacd.service
+  sudo systemctl daemon-reload
+else
+  echo "[1/4] Stopping processes..."
+  pkill -f "Xvfb :99" 2>/dev/null || true
+  pkill -f "fluxbox -display :99" 2>/dev/null || true
+  pkill -f "x11vnc -display :99" 2>/dev/null || true
+  pkill -f guacd 2>/dev/null || true
+  sudo /usr/share/tomcat9/bin/shutdown.sh 2>/dev/null || true
+
+  echo "[2/4] Removing services..."
+  sudo rm -f /etc/systemd/system/guacd.service 2>/dev/null || true
+fi
+
+echo "[3/4] Removing files..."
+sudo rm -rf /etc/guacamole
+sudo rm -rf /var/lib/tomcat9/webapps/guacamole*
+sudo rm -rf /tmp/guacamole-server*
+sudo rm -rf /usr/local/sbin/guacd
+sudo rm -rf /usr/local/lib/libguac*
+sudo rm -rf "$HOME/.fluxbox" "$HOME/.vnc" "$HOME/.mozilla"
+sudo rm -rf "$HOME/.config/mozilla" "$HOME/.config/xfce4"
+sudo rm -rf "$HOME/.workstation-webspace-guacamole"
+
+echo "[4/4] Cleaning .bashrc..."
+sed -i '/Linux version of OSX pbcopy/,/pbpaste/d' "$HOME/.bashrc" 2>/dev/null || true
+
+echo ""
+echo "Done. Packages (build-essential, tomcat9, etc.) were not removed."
+echo "To remove them: sudo apt-get remove tomcat9 default-jdk"

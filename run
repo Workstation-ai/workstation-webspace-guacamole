@@ -1,0 +1,338 @@
+#!/bin/bash
+# workstation-webspace-guacamole: One-command setup
+# Usage: ./run [--agent-preset-workspace]
+set -euo pipefail
+
+# --- Parse flags ---
+AGENT_WORKSPACE=false
+for arg in "$@"; do
+  case "$arg" in
+    --agent-preset-workspace) AGENT_WORKSPACE=true ;;
+  esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+USER_HOME="$HOME"
+USER_NAME="$(whoami)"
+
+# --- Load .env ---
+if [ ! -f "$SCRIPT_DIR/.env" ]; then
+  echo "Error: .env file not found."
+  echo "Copy .env.example to .env and configure it:"
+  echo "  cp .env.example .env"
+  echo "  nano .env"
+  exit 1
+fi
+
+source "$SCRIPT_DIR/.env"
+
+if [ -z "${GUAC_PASSWORD:-}" ]; then
+  echo "Error: GUAC_PASSWORD is not set in .env"
+  exit 1
+fi
+
+if [ -z "${VNC_PASSWORD:-}" ]; then
+  echo "Error: VNC_PASSWORD is not set in .env"
+  exit 1
+fi
+
+RESOLUTION="${SCREEN_RESOLUTION:-1920x1080}"
+DEPTH="${COLOR_DEPTH:-24}"
+RES_X="${RESOLUTION%x*}"
+RES_Y="${RESOLUTION#*x}"
+
+GUAC_VERSION="1.6.0"
+TOMCAT_VERSION="9"
+JAVA_HOME="${JAVA_HOME:-/usr}"
+
+# --- Check for systemd ---
+USE_SYSTEMD=true
+if ! pidof systemd > /dev/null 2>&1; then
+  echo "Note: systemd not detected. Running in direct mode (no auto-restart)."
+  USE_SYSTEMD=false
+fi
+
+echo "=== workstation-webspace-guacamole ==="
+echo "Resolution: ${RESOLUTION}x${DEPTH}bit"
+echo "User: ${USER_NAME}"
+echo "Guacamole: v${GUAC_VERSION}"
+echo ""
+
+# --- Packages ---
+echo "[1/8] Installing dependencies..."
+sudo apt-get update -qq
+sudo apt-get install -y -qq \
+  build-essential libcairo2-dev libjpeg62-dev libpng-dev libtool-bin libossp-uuid-dev \
+  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+  freerdp2-dev libpango1.0-dev libssh2-1-dev libtelnet-dev \
+  libvncserver-dev libwebsockets-dev libpulse-dev libssl-dev \
+  libvorbis-dev libwebp-dev \
+  curl wget git unzip \
+  x11vnc fluxbox xfce4-terminal xdg-utils xsel dbus-x11 xdotool wmctrl \
+  2>&1 | tail -5
+
+# Install Java if not present
+if ! command -v java &> /dev/null; then
+  echo "Installing Java..."
+  sudo apt-get install -y -qq default-jdk 2>&1 | tail -3
+fi
+
+# Install Tomcat 9
+if [ ! -d "/var/lib/tomcat${TOMCAT_VERSION}" ]; then
+  echo "Installing Tomcat ${TOMCAT_VERSION}..."
+  # Add Ubuntu 22.04 repo for Tomcat 9 if needed
+  if ! apt-cache show tomcat9 &> /dev/null 2>&1; then
+    sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu jammy universe" 2>/dev/null || true
+    sudo apt-get update -qq
+  fi
+  sudo apt-get install -y -qq tomcat9 tomcat9-admin 2>&1 | tail -3
+else
+  echo "Tomcat ${TOMCAT_VERSION} already installed"
+fi
+
+# --- Build guacamole-server ---
+echo "[2/8] Building guacamole-server v${GUAC_VERSION}..."
+if ! command -v guacd &> /dev/null; then
+  cd /tmp
+  if [ ! -d "guacamole-server-${GUAC_VERSION}" ]; then
+    wget -q "https://downloads.apache.org/guacamole/${GUAC_VERSION}/source/guacamole-server-${GUAC_VERSION}.tar.gz" -O guacamole-server.tar.gz
+    tar -xzf guacamole-server.tar.gz
+  fi
+  cd "guacamole-server-${GUAC_VERSION}"
+  ./configure --with-init-dir=/etc/init.d 2>&1 | tail -5
+  make -j$(nproc) 2>&1 | tail -3
+  sudo make install 2>&1 | tail -3
+  sudo ldconfig
+  echo "guacamole-server installed successfully"
+else
+  echo "guacd already installed, skipping"
+fi
+
+# --- Deploy guacamole-client ---
+echo "[3/8] Deploying guacamole-client..."
+GUAC_HOME="/etc/guacamole"
+sudo mkdir -p "${GUAC_HOME}"/{extensions,lib}
+
+if [ ! -f "${GUAC_HOME}/guacamole.war" ]; then
+  wget -q "https://downloads.apache.org/guacamole/${GUAC_VERSION}/binary/guacamole-${GUAC_VERSION}.war" \
+    -O /tmp/guacamole.war
+  sudo cp /tmp/guacamole.war "${GUAC_HOME}/guacamole.war"
+fi
+
+# Link to Tomcat webapps
+TOMCAT_WEBAPPS="/var/lib/tomcat${TOMCAT_VERSION}/webapps"
+sudo ln -sf "${GUAC_HOME}/guacamole.war" "${TOMCAT_WEBAPPS}/guacamole.war"
+
+# Set GUACAMOLE_HOME
+if ! grep -q "GUACAMOLE_HOME" /etc/default/tomcat9 2>/dev/null; then
+  echo "GUACAMOLE_HOME=${GUAC_HOME}" | sudo tee -a /etc/default/tomcat9
+fi
+
+# --- Configure guacamole.properties ---
+echo "[4/8] Configuring Guacamole..."
+sudo tee "${GUAC_HOME}/guacamole.properties" > /dev/null << EOF
+guacd-hostname: localhost
+guacd-port:     4822
+auth-provider:  guacauth
+EOF
+
+# --- Configure SQLite auth ---
+echo "[5/8] Setting up authentication..."
+if [ ! -f "${GUAC_HOME}/guacamole.db" ]; then
+  # Download auth extension if needed
+  if [ ! -f "${GUAC_HOME}/extensions/guacamole-auth-sqlite-${GUAC_VERSION}.jar" ]; then
+    wget -q "https://downloads.apache.org/guacamole/${GUAC_VERSION}/extensions/guacamole-auth-sqlite-${GUAC_VERSION}.jar" \
+      -O "${GUAC_HOME}/extensions/guacamole-auth-sqlite-${GUAC_VERSION}.jar" 2>/dev/null || true
+  fi
+  
+  # Create initial user-mapping.xml as fallback
+  sudo tee "${GUAC_HOME}/user-mapping.xml" > /dev/null << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<user-mapping>
+    <authorize username="guacadmin" password="${GUAC_PASSWORD}">
+        <connection name="Local Desktop">
+            <protocol>vnc</protocol>
+            <param name="hostname">localhost</param>
+            <param name="port">5900</param>
+            <param name="password">${VNC_PASSWORD}</param>
+        </connection>
+    </authorize>
+</user-mapping>
+EOF
+  echo "Created user-mapping.xml with guacadmin user"
+fi
+
+# --- VNC Password ---
+echo "[6/8] Setting VNC password..."
+mkdir -p "$USER_HOME/.vnc"
+x11vnc -storepasswd "$VNC_PASSWORD" "$USER_HOME/.vnc/passwd" 2>&1 | tail -1
+
+# --- Fluxbox ---
+echo "[7/8] Configuring desktop..."
+mkdir -p "$USER_HOME/.fluxbox"
+
+cat > "$USER_HOME/.fluxbox/menu" << 'MENU'
+[begin] (Desktop)
+	[submenu] (Applications)
+		[exec] (Terminal) {xfce4-terminal} <>
+		[exec] (Firefox) {/opt/firefox/firefox} <>
+		[exec] (Text Editor) {xfce4-terminal -e nano} <>
+	[end]
+	[submenu] (System)
+		[exec] (htop) {xfce4-terminal -e htop} <>
+	[end]
+	[separator]
+	[restart] (Restart) <>
+	[exit] (Exit) <>
+end
+MENU
+
+cat > "$USER_HOME/.fluxbox/init" << EOF
+! Toolbar
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.widthPercent: 100
+session.screen0.toolbar.height: 32
+session.screen0.toolbar.tools: prevworkspace, workspacename, nextworkspace, clock, iconbar, systemtray
+
+! Iconbar
+session.screen0.iconbar.mode: {static groups} (workspace=[current])
+
+! Workspace
+session.screen0.workspaceCount: 1
+EOF
+
+# --- Systemd services or direct mode ---
+TUNNEL_LOG=""
+if [ "$USE_SYSTEMD" = true ]; then
+  echo "[8/8] Installing services..."
+  sudo mkdir -p /var/log/bux
+  TUNNEL_LOG="/var/log/bux/guacamole-tunnel.log'
+  
+  # Create systemd services
+  sudo tee /etc/systemd/system/guacd.service > /dev/null << 'EOF'
+[Unit]
+Description=Guacamole Proxy Daemon
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/sbin/guacd -f
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable guacd 2>/dev/null
+else
+  echo "[8/8] Direct mode (no systemd)..."
+  LOG_DIR="$USER_HOME/.workstation-webspace-guacamole/logs"
+  mkdir -p "$LOG_DIR"
+  TUNNEL_LOG="$LOG_DIR/tunnel.log"
+fi
+
+# --- pbcopy/pbpaste ---
+if ! grep -q "pbcopy" "$USER_HOME/.bashrc" 2>/dev/null; then
+  cat >> "$USER_HOME/.bashrc" << 'EOF'
+
+# Linux version of OSX pbcopy and pbpaste.
+alias pbcopy='xsel --clipboard --input'
+alias pbpaste='xsel --clipboard --output'
+EOF
+fi
+
+# --- Start ---
+echo ""
+echo "Starting services..."
+
+if [ "$USE_SYSTEMD" = true ]; then
+  sudo systemctl start guacd 2>/dev/null || true
+  sudo systemctl restart tomcat9 2>/dev/null || true
+  
+  # Start desktop
+  Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
+  sleep 1
+  DISPLAY=:99 fluxbox &
+  sleep 1
+  DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
+else
+  # Direct mode
+  truncate -s 0 "$TUNNEL_LOG" 2>/dev/null || true
+
+  # Kill existing
+  pkill -f "Xvfb :99" 2>/dev/null || true
+  pkill -f "fluxbox -display :99" 2>/dev/null || true
+  pkill -f "x11vnc -display :99" 2>/dev/null || true
+  pkill -f guacd 2>/dev/null || true
+  sleep 1
+
+  # Start guacd
+  /usr/local/sbin/guacd -f &
+  sleep 2
+
+  # Start Tomcat
+  sudo /usr/share/tomcat${TOMCAT_VERSION}/bin/startup.sh 2>/dev/null || true
+  sleep 3
+
+  # Start desktop
+  Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac &
+  sleep 1
+  DISPLAY=:99 fluxbox &
+  sleep 1
+  DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes &
+fi
+
+sleep 2
+
+# --- Try cloudflared ---
+CF_URL=""
+if command -v cloudflared &> /dev/null; then
+  echo ""
+  echo "Attempting cloudflare tunnel..."
+  truncate -s 0 "$TUNNEL_LOG" 2>/dev/null || true
+  cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080 > "$TUNNEL_LOG" 2>&1 &
+  CF_PID=$!
+  
+  for i in $(seq 1 15); do
+    CF_URL=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | tail -1)
+    [ -n "$CF_URL" ] && break
+    kill -0 $CF_PID 2>/dev/null || break
+    sleep 1
+  done
+fi
+
+# --- Agent workspace ---
+if [ "$AGENT_WORKSPACE" = true ]; then
+  echo ""
+  echo "=== Setting up Agent Workspace ==="
+  curl -fsSL https://raw.githubusercontent.com/reflecterlabs/alpine-opencode-gentleai/main/setup.sh | bash
+  echo "Agent workspace setup complete."
+fi
+
+# --- Print access info ---
+echo ""
+echo "=== Ready ==="
+echo ""
+if [ -n "$CF_URL" ]; then
+  echo "Public URL:  ${CF_URL}/guacamole"
+  echo ""
+  echo "Or use direct access:"
+fi
+echo "Local URL:   http://localhost:8080/guacamole"
+echo "VNC direct:  vnc://localhost:5900"
+echo ""
+echo "Login:"
+echo "  Username:  guacadmin"
+echo "  Password:  ${GUAC_PASSWORD}"
+if [ "$AGENT_WORKSPACE" = true ]; then
+  echo ""
+  echo "Agent:      OpenCode GentleAI installed"
+fi
+echo ""
+echo "--- How to access ---"
+echo "1. In Codespaces: click the 'Ports' tab, find port 8080, click the globe icon"
+echo "2. Or open: http://localhost:8080/guacamole in your browser"
+echo "3. Login with guacadmin / your GUAC_PASSWORD"
+echo "4. Add connections: Settings → Connections → New Connection"
