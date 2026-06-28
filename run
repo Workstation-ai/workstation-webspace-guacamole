@@ -283,7 +283,7 @@ else
   sleep 1
 
   # Start guacd
-  /usr/local/sbin/guacd -f &
+  nohup /usr/local/sbin/guacd -f > /tmp/guacd.log 2>&1 &
   sleep 2
 
   # Start Tomcat with correct CATALINA_BASE
