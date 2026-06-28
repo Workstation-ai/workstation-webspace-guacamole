@@ -12,7 +12,7 @@ DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq \
   xfce4 xfce4-appfinder xfce4-terminal xfce4-panel \
   xfce4-session xfce4-settings xfconf xfdesktop4 xfwm4 \
   thunar xdg-utils xsel dbus-x11 xdotool wmctrl \
-  adwaita-icon-theme adwaita-dark-theme \
+  gnome-themes-extra gnome-themes-extra-data \
   2>&1 | tail -5
 
 # --- Configure XFCE4 ---

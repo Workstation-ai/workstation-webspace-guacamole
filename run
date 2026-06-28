@@ -279,26 +279,47 @@ if [ "$USE_SYSTEMD" = true ]; then
   # Ensure clean X state
   rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
   
-  # Start desktop (nohup required so services survive script exit)
-  nohup Xvfb :99 -screen 0 "${RES_X}x${RES_Y}x${DEPTH}" -ac > /tmp/xvfb.log 2>&1 &
-  disown
-  sleep 1
-  nohup env DISPLAY=:99 $DESKTOP_CMD > /tmp/desktop.log 2>&1 &
-  disown
-  sleep 3
+  # Write wrapper scripts (variables must be expanded at write time, not runtime)
+  cat > /tmp/start-xvfb.sh << XVFBEOF
+#!/bin/bash
+exec Xvfb :99 -screen 0 ${RES_X}x${RES_Y}x${DEPTH} -ac
+XVFBEOF
+  chmod +x /tmp/start-xvfb.sh
+
+  cat > /tmp/start-desktop.sh << DESKTOPEOF
+#!/bin/bash
+export DISPLAY=:99
+exec $DESKTOP_CMD
+DESKTOPEOF
+  chmod +x /tmp/start-desktop.sh
+
+  cat > /tmp/start-vnc.sh << VNCEOF
+#!/bin/bash
+export DISPLAY=:99
+exec x11vnc -display :99 -forever -shared -rfbauth ${USER_HOME}/.vnc/passwd -rfbport 5900 -noxdamage -noxrecord -noxfixes
+VNCEOF
+  chmod +x /tmp/start-vnc.sh
+
+  # Start Xvfb in new session (survives parent exit)
+  setsid /tmp/start-xvfb.sh > /tmp/xvfb.log 2>&1 &
+  sleep 2
+  
+  # Start desktop in new session
+  setsid /tmp/start-desktop.sh > /tmp/desktop.log 2>&1 &
+  sleep 8
+  
   # Set wallpaper after desktop is ready
   WALLPAPER="$USER_HOME/.workstation-center/wallpaper.jpg"
   if [ -f "$WALLPAPER" ]; then
     if [ "$EDITION" = "pro" ]; then
-      nohup env DISPLAY=:99 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$WALLPAPER" 2>/dev/null &
+      DISPLAY=:99 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$WALLPAPER" 2>/dev/null || true
     else
-      nohup env DISPLAY=:99 fbsetbg -f "$WALLPAPER" 2>/dev/null &
+      DISPLAY=:99 fbsetbg -f "$WALLPAPER" 2>/dev/null || true
     fi
-    disown
   fi
-  sleep 1
-  nohup env DISPLAY=:99 x11vnc -display :99 -forever -shared -rfbauth "$USER_HOME/.vnc/passwd" -rfbport 5900 -noxdamage -noxrecord -noxfixes > /tmp/x11vnc.log 2>&1 &
-  disown
+  
+  # Start VNC in new session
+  setsid /tmp/start-vnc.sh > /tmp/x11vnc.log 2>&1 &
 else
   # Direct mode
   truncate -s 0 "$TUNNEL_LOG" 2>/dev/null || true
