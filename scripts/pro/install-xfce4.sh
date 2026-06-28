@@ -11,6 +11,7 @@ sudo apt-get update -qq
 DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq \
   xfce4 xfce4-appfinder xfce4-terminal xfce4-panel \
   xfce4-session xfce4-settings xfconf xfdesktop4 xfwm4 \
+  xfce4-whiskermenu-plugin \
   thunar xdg-utils xsel dbus-x11 xdotool wmctrl \
   gnome-themes-extra gnome-themes-extra-data \
   2>&1 | tail -5
@@ -57,6 +58,7 @@ cat > "${XFCE_DIR}/xfconf/xfce-perchannel-xml/xfce4-panel.xml" << 'EOF'
         <value type="int" value="3"/>
         <value type="int" value="4"/>
         <value type="int" value="5"/>
+        <value type="int" value="6"/>
       </property>
     </property>
   </property>
@@ -64,8 +66,17 @@ cat > "${XFCE_DIR}/xfconf/xfce-perchannel-xml/xfce4-panel.xml" << 'EOF'
     <property name="plugin-1" type="string" value="whisker-menu"/>
     <property name="plugin-2" type="string" value="showdesktop"/>
     <property name="plugin-3" type="string" value="tasklist"/>
-    <property name="plugin-4" type="string" value="systray"/>
+    <property name="plugin-4" type="string" value="systray">
+      <property name="known-items" type="array">
+        <value type="string" value="nm-applet"/>
+      </property>
+    </property>
     <property name="plugin-5" type="string" value="clock"/>
+    <property name="plugin-6" type="string" value="actionbuttons">
+      <property name="actions" type="array">
+        <value type="string" value="logout"/>
+      </property>
+    </property>
   </property>
 </channel>
 EOF
