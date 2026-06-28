@@ -207,7 +207,13 @@ session.screen0.iconbar.mode: {static groups} (workspace=[current])
 
 ! Workspace
 session.screen0.workspaceCount: 1
+
+! Wallpaper
+session.screen0.rootCommands: {xsetroot -solid "#000000"} || wallpaper ~/.fluxbox/wallpaper.jpg || true
 EOF
+
+# Download default wallpaper
+wget -q "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&h=1080&fit=crop" -O "$USER_HOME/.fluxbox/wallpaper.jpg" 2>/dev/null || true
 
 # --- Systemd services or direct mode ---
 TUNNEL_LOG=""
