@@ -90,6 +90,14 @@ else
   echo "Tomcat ${TOMCAT_VERSION} already installed"
 fi
 
+# --- cloudflared ---
+if ! command -v cloudflared &> /dev/null; then
+  echo "Installing cloudflared..."
+  curl -sL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64" -o /tmp/cloudflared
+  chmod +x /tmp/cloudflared
+  sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+fi
+
 # --- Build guacamole-server ---
 echo "[2/8] Building guacamole-server v${GUAC_VERSION}..."
 if ! command -v guacd &> /dev/null; then
@@ -206,9 +214,9 @@ TUNNEL_LOG=""
 if [ "$USE_SYSTEMD" = true ]; then
   echo "[8/8] Installing services..."
   sudo mkdir -p /var/log/bux
-  TUNNEL_LOG="/var/log/bux/guacamole-tunnel.log'
+  TUNNEL_LOG="/var/log/bux/guacamole-tunnel.log"
   
-  # Create systemd services
+  # Create guacd systemd service
   sudo tee /etc/systemd/system/guacd.service > /dev/null << 'EOF'
 [Unit]
 Description=Guacamole Proxy Daemon
