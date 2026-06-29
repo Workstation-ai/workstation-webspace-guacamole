@@ -145,17 +145,20 @@ if [ -f "$WALLPAPER" ]; then
   (sleep 5 && DISPLAY=:99 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$WALLPAPER" 2>/dev/null) &
 fi
 
-# --- Headless logout script ---
+# --- Headless logout wrapper ---
 # Without a display manager, xfce4-session-logout crashes.
-# Create a custom script that restarts the session cleanly.
-sudo tee /usr/local/bin/workstation-logout > /dev/null << 'LOGEOF'
+# Replace it with a wrapper that restarts the session cleanly.
+sudo tee /usr/bin/xfce4-session-logout > /dev/null << 'LOGEOF'
 #!/bin/bash
 export DISPLAY=:99
-pkill -u $(whoami) xfce4-session
-sleep 2
+for proc in xfce4-session xfwm4 xfdesktop xfsettingsd xfce4-panel xfconfd xfce4-appfinder thunar; do
+  pkill -u $(id -un) "$proc" 2>/dev/null
+done
+sleep 3
 setsid startxfce4 &>/dev/null &
+exit 0
 LOGEOF
-sudo chmod +x /usr/local/bin/workstation-logout
+sudo chmod +x /usr/bin/xfce4-session-logout
 
 # --- Disable crashy autostart apps ---
 mkdir -p "${USER_HOME}/.config/autostart"
