@@ -148,14 +148,19 @@ fi
 # --- Headless logout wrapper ---
 # Without a display manager, xfce4-session-logout crashes.
 # Replace it with a wrapper that restarts the session cleanly.
+# Must use nohup+disown so restart survives the panel killing itself.
 sudo tee /usr/bin/xfce4-session-logout > /dev/null << 'LOGEOF'
 #!/bin/bash
-export DISPLAY=:99
+nohup bash -c '
+sleep 1
 for proc in xfce4-session xfwm4 xfdesktop xfsettingsd xfce4-panel xfconfd xfce4-appfinder thunar; do
   pkill -u $(id -un) "$proc" 2>/dev/null
 done
-sleep 3
+sleep 2
+export DISPLAY=:99
 setsid startxfce4 &>/dev/null &
+' &>/dev/null &
+disown
 exit 0
 LOGEOF
 sudo chmod +x /usr/bin/xfce4-session-logout
