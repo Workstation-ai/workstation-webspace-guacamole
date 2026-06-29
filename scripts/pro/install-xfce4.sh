@@ -63,7 +63,7 @@ cat > "${XFCE_DIR}/xfconf/xfce-perchannel-xml/xfce4-panel.xml" << 'EOF'
     </property>
   </property>
   <property name="plugins" type="empty">
-    <property name="plugin-1" type="string" value="whisker-menu"/>
+    <property name="plugin-1" type="string" value="whiskermenu"/>
     <property name="plugin-2" type="string" value="showdesktop"/>
     <property name="plugin-3" type="string" value="tasklist"/>
     <property name="plugin-4" type="string" value="systray">
@@ -72,7 +72,7 @@ cat > "${XFCE_DIR}/xfconf/xfce-perchannel-xml/xfce4-panel.xml" << 'EOF'
       </property>
     </property>
     <property name="plugin-5" type="string" value="clock"/>
-    <property name="plugin-6" type="string" value="actionbuttons">
+    <property name="plugin-6" type="string" value="actions">
       <property name="actions" type="array">
         <value type="string" value="logout"/>
       </property>
