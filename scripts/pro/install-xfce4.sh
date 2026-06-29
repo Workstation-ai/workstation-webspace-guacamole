@@ -145,6 +145,39 @@ if [ -f "$WALLPAPER" ]; then
   (sleep 5 && DISPLAY=:99 xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$WALLPAPER" 2>/dev/null) &
 fi
 
+# --- Headless logout script ---
+# Without a display manager, xfce4-session-logout crashes.
+# Create a custom script that restarts the session cleanly.
+sudo tee /usr/local/bin/workstation-logout > /dev/null << 'LOGEOF'
+#!/bin/bash
+export DISPLAY=:99
+pkill -u $(whoami) xfce4-session
+sleep 2
+setsid startxfce4 &>/dev/null &
+LOGEOF
+sudo chmod +x /usr/local/bin/workstation-logout
+
+# --- Disable crashy autostart apps ---
+mkdir -p "${USER_HOME}/.config/autostart"
+for f in /etc/xdg/autostart/*.desktop; do
+  name=$(basename "$f")
+  if echo "$name" | grep -qiE "lock|screen|power|idle|polkit"; then
+    cp "$f" "${USER_HOME}/.config/autostart/" 2>/dev/null
+    echo "Hidden=true" >> "${USER_HOME}/.config/autostart/${name}"
+  fi
+done
+
+# --- Disable logout prompt (headless mode) ---
+mkdir -p "${USER_HOME}/.config/xfce4/xfconf/xfce-perchannel-xml"
+cat > "${USER_HOME}/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-session" version="1.0">
+  <property name="general" type="empty">
+    <property name="LogoutPrompt" type="bool" value="false"/>
+  </property>
+</channel>
+EOF
+
 echo "=== Pro Edition installed successfully ==="
 echo "  Desktop: XFCE4"
 echo "  RAM: ~200 MB"
