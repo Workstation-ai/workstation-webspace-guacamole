@@ -1,0 +1,3 @@
+[submodule ".achords"]
+	path = .achords
+	url = https://github.com/Workstation-ai/.achords.git
