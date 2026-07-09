@@ -1,39 +1,53 @@
+<!-- achords:header:v1.5.0 -->
+<!-- achords:tags: { "product": "obase", "domain": "coordination", "type": "reference", "status": "stable", "audience": "agent" } -->
+<!-- achords:resources -->
+| Resource | Path | Purpose |
+|----------|------|---------|
+| Org Rules | `.achords/AGENTS.md` | Organization-wide agent rules |
+| Org Memory | `.achords/.engram/` | Shared knowledge (git-synced) |
+| Conventions | `.achords/config/conventions.json` | Code conventions |
+| Policies | `.achords/config/policies.json` | Org policies |
+| Skills Rules | `.skills/AGENTS.md` | How to create/maintain skills |
+| Skills | `.skills/skills/` | Shared skills (Agent Skills spec) |
+| Onboarding | `.internal/onboarding/` | Setup scripts and docs |
+| Repo Memory | `.engram/` | Isolated repo memory |
+| Repo Config | `.engram/config.json` | project_name setting |
+<!-- achords:end -->
+
 # workstation-webspace-guacamole
 
-Apache Guacamole remote desktop gateway — Tiny (fluxbox) and Pro (XFCE4) editions for Workstation Center.
+> Agent configuration for this repository.
+>
+> This file is PART OF the achords organization orchestration system.
+> By reading and following this file, you agree to operate within the
+> organization's policies, conventions, and standards.
 
-## Context
+## Reading Order
 
-- **Org**: Workstation-ai
-- **User**: Ignacio del Corro (ignacio@workstation.center)
-- **Box**: bux VPS — full sudo, Telegram bot (agency)
-- **Skills installed**: cloudflare-tunnel, cognitive-doc-design, comment-writer
+Files MUST be read in order before any task. Each layer defines
+constraints and context for the next.
 
-## 🔒 Credential Safety — CRITICAL
+1. **`.achords/AGENTS.md`** — Org rules (governance, protocols, escalation)
+2. **`.achords/config/policies.json`** — Access control, review requirements
+3. **`.achords/config/conventions.json`** — Code conventions and standards
+4. **`.skills/AGENTS.md`** — Skills rules and patterns
+5. **`.skills/skills/`** — Reusable skill library
+6. **`.internal/onboarding/`** — Team docs (if applicable)
+7. **`.engram/config.json`** — Repo context and project name
+8. **This file** — Repo-specific rules (overrides/extensions)
 
-Never store API keys, tokens, passwords, or secrets in Engram memory. If you save an observation or session summary that mentions credentials:
+## Organization Rules
 
-- Replace the actual value with `(stored in .env.credentials, never embed in engram)`
-- Save the real value ONLY in `.env.credentials` (gitignored, never tracked)
-- Before running `engram sync` to export `.engram/`, verify no credentials leaked
+The entire `.achords/` directory defines how agents operate. Every
+session MUST start by loading org rules, policies, and conventions.
 
-Credentials for this project live in `/opt/bux/repo/.env.credentials` or a local `.env` copy.
+## Memory Protocol
 
-## 🔄 Engram Sync Cadence — MANDATORY
+- **Org memory**: `.achords/.engram/` — shared, git-synced
+- **Repo memory**: `.engram/` — isolated to this repo
+- Save decisions, bugs, and patterns
+- Use `project: "Workstation-ai"` for org-level saves
 
-This repo has an `.engram/` directory with portable memory from the `bux` project.
+## Repository-Specific Rules
 
-- **After every session** where you save new discoveries, decisions, bug fixes, or patterns → run `engram sync --project bux` from this repo root
-- **Before ending a session** → sync `.engram/` and commit the updates
-- **After `engram sync`** → `git add .engram/ && git commit -m "sync engram memories"` — if nothing new, skip it
-- **Before syncing** → always verify no credentials leaked (see 🔒 Credential Safety above)
-- **When pulling** `.engram/` updates from GitHub → run `engram sync --import` to load the new context
-
-## Files
-
-- `run` — Main setup script (parameterized)
-- `run-tiny` — Tiny edition shortcut
-- `run-pro` — Pro edition shortcut
-- `stop`, `status`, `uninstall` — Service management
-- `.env` — Local config (gitignored, copy from `.env.example`)
-- `scripts/` — Installers, branding, services
+Add your repo-specific rules here.
