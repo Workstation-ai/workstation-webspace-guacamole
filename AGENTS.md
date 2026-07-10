@@ -14,40 +14,18 @@
 | Repo Config | `.engram/config.json` | project_name setting |
 <!-- achords:end -->
 
+Read files in this order before any task — each layer defines context for the next:
+1. .achords/AGENTS.md — Org rules (governance, protocols, escalation)
+2. .achords/config/policies.json — Access control, review requirements
+3. .achords/config/conventions.json — Code conventions and standards
+4. .skills/AGENTS.md — Skills rules and patterns
+5. .skills/skills/ — Reusable skill library
+6. .internal/onboarding/ — Team docs (if applicable)
+7. .engram/config.json — Repo context and project name
+8. This file — Repo-specific rules (overrides/extensions)
+
+The entire .achords/ directory defines how agents operate. Every session MUST start by loading org rules, policies, and conventions.
+
+Org memory: .achords/.engram/ (shared, git-synced). Repo memory: .engram/ (isolated). Save decisions, bugs, and patterns. Use project: "Workstation-ai" for org-level saves.
+
 # workstation-webspace-guacamole
-
-> Agent configuration for this repository.
->
-> This file is PART OF the achords organization orchestration system.
-> By reading and following this file, you agree to operate within the
-> organization's policies, conventions, and standards.
-
-## Reading Order
-
-Files MUST be read in order before any task. Each layer defines
-constraints and context for the next.
-
-1. **`.achords/AGENTS.md`** — Org rules (governance, protocols, escalation)
-2. **`.achords/config/policies.json`** — Access control, review requirements
-3. **`.achords/config/conventions.json`** — Code conventions and standards
-4. **`.skills/AGENTS.md`** — Skills rules and patterns
-5. **`.skills/skills/`** — Reusable skill library
-6. **`.internal/onboarding/`** — Team docs (if applicable)
-7. **`.engram/config.json`** — Repo context and project name
-8. **This file** — Repo-specific rules (overrides/extensions)
-
-## Organization Rules
-
-The entire `.achords/` directory defines how agents operate. Every
-session MUST start by loading org rules, policies, and conventions.
-
-## Memory Protocol
-
-- **Org memory**: `.achords/.engram/` — shared, git-synced
-- **Repo memory**: `.engram/` — isolated to this repo
-- Save decisions, bugs, and patterns
-- Use `project: "Workstation-ai"` for org-level saves
-
-## Repository-Specific Rules
-
-Add your repo-specific rules here.
