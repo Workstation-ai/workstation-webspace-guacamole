@@ -27,3 +27,5 @@ The entire .achords/ directory defines how agents operate. Every session MUST st
 
 Org memory: .achords/.engram/ (shared, git-synced). Repo memory: .engram/ (isolated). Save decisions, bugs, and patterns. Use project: "Workstation-ai" for org-level saves.
 <!-- achords:end -->
+
+# workstation-webspace-guacamole
