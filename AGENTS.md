@@ -12,7 +12,6 @@
 | Onboarding | `.internal/onboarding/` | Setup scripts and docs |
 | Repo Memory | `.engram/` | Isolated repo memory |
 | Repo Config | `.engram/config.json` | project_name setting |
-<!-- achords:end -->
 
 Read files in this order before any task — each layer defines context for the next:
 1. .achords/AGENTS.md — Org rules (governance, protocols, escalation)
@@ -27,5 +26,4 @@ Read files in this order before any task — each layer defines context for the 
 The entire .achords/ directory defines how agents operate. Every session MUST start by loading org rules, policies, and conventions.
 
 Org memory: .achords/.engram/ (shared, git-synced). Repo memory: .engram/ (isolated). Save decisions, bugs, and patterns. Use project: "Workstation-ai" for org-level saves.
-
-# workstation-webspace-guacamole
+<!-- achords:end -->
